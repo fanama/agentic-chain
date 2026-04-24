@@ -21,7 +21,6 @@ Le système est divisé en trois pôles interactifs :
 
 
 ```mermaid
-```mermaid
 flowchart LR
     client[Utilisateur / Architecte]
 
