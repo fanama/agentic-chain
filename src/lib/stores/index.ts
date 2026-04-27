@@ -1,6 +1,5 @@
 import { writable, type Writable, get } from 'svelte/store';
 import { Tool, type PlanNode, type StateContext } from '../domain/engine';
-import { exec } from "../tools/add_one"
 
 export interface LogEntry { msg: string; cls: string; }
 

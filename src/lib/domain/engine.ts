@@ -7,7 +7,7 @@ export type OnStateUpdateFn = (state: StateContext) => void;
 
 export interface PlanNode {
   id: string;
-  type: 'tool' | 'condition' | 'loop';
+  type: 'tool' | 'condition' | 'loop' | 'setVariable'; // <-- Added 'setVariable'
   toolId?: string;
   outputKey?: string;
   nextId?: string;
@@ -15,6 +15,8 @@ export interface PlanNode {
   trueId?: string;
   falseId?: string;
   bodyId?: string;
+  key?: string;   // <-- Added for SetVariable
+  value?: string; // <-- Added for SetVariable
 }
 
 // ==========================================
@@ -105,6 +107,25 @@ export class ConditionStep extends Step {
   }
 }
 
+export class SetVariableStep extends Step {
+  public key: string;
+  public value: string;
+  public nextStep?: Step; // <-- Made optional to allow initialization before wiring
+
+  constructor(id: string, key: string, value: string) {
+    super();
+    this.id = id;
+    this.key = key;
+    this.value = value;
+  }
+
+  async execute(store: StateStore, logger: LoggerFn): Promise<Step | undefined> {
+    store.update(this.key, this.value);
+    logger(`[${this.id}] 🔀 Update: ${this.key} : ${this.value}`, 'log-warn');
+    return this.nextStep;
+  }
+}
+
 export class LoopStep extends Step {
   public expr: string;
   public loopBody?: Step;
@@ -144,8 +165,16 @@ export async function executePlan(
       if (tool) instances.set(n.id, new ToolStep(n.id, tool, n.outputKey));
       else throw new Error(`Outil manquant: ${n.toolId}`);
     }
-    else if (n.type === 'condition' && n.expr) instances.set(n.id, new ConditionStep(n.id, n.expr));
-    else if (n.type === 'loop' && n.expr) instances.set(n.id, new LoopStep(n.id, n.expr));
+    else if (n.type === 'condition' && n.expr) {
+      instances.set(n.id, new ConditionStep(n.id, n.expr));
+    }
+    else if (n.type === 'loop' && n.expr) {
+      instances.set(n.id, new LoopStep(n.id, n.expr));
+    }
+    // <-- Added SetVariable compilation
+    else if (n.type === 'setVariable' && n.key !== undefined && n.value !== undefined) {
+      instances.set(n.id, new SetVariableStep(n.id, n.key, n.value));
+    }
   });
 
   // 2. Phase de Wiring (Lier les identifiants aux pointeurs)
@@ -153,7 +182,10 @@ export async function executePlan(
     const step = instances.get(n.id);
     if (!step) return;
 
-    if (step instanceof ToolStep && n.nextId) step.nextStep = instances.get(n.nextId);
+    // <-- Added SetVariableStep into the simple nextId linking
+    if ((step instanceof ToolStep || step instanceof SetVariableStep) && n.nextId) {
+      step.nextStep = instances.get(n.nextId);
+    }
     if (step instanceof ConditionStep) {
       if (n.trueId) step.trueBranch = instances.get(n.trueId);
       if (n.falseId) step.falseBranch = instances.get(n.falseId);

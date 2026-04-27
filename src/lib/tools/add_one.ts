@@ -5,5 +5,6 @@ export const desc = 'Incrémente state.count de 1';
 
 // C'est maintenant une vraie fonction typée !
 export function exec(state: StateContext) {
-  return (state.count || 0) + 1;
+  state.count = state.count + 1
+  return
 }

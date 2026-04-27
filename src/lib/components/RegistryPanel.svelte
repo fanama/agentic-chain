@@ -6,28 +6,37 @@
   let toolForm = { id: "", desc: "", exec: 'return { status: "ok" };' };
 
   function addNode(
-    type: "tool" | "condition" | "loop",
+    type: "tool" | "condition" | "loop" | "setVariable", // <-- Added 'setVariable'
     toolId: string | null = null,
   ): void {
     const id = `etape_${$planNodes.length + 1}`;
     let newNode: PlanNode = { id, type };
 
-    if (type === "tool")
+    if (type === "tool") {
       newNode = {
         ...newNode,
         toolId: toolId as string,
         outputKey: `${toolId}_result`,
         nextId: "",
       };
-    else if (type === "condition")
+    } else if (type === "condition") {
       newNode = {
         ...newNode,
         expr: "state.valeur > 10",
         trueId: "",
         falseId: "",
       };
-    else if (type === "loop")
+    } else if (type === "loop") {
       newNode = { ...newNode, expr: "state.count < 3", bodyId: "", nextId: "" };
+    } else if (type === "setVariable") {
+      // <-- Added initialization logic
+      newNode = {
+        ...newNode,
+        key: "newKey",
+        value: "''", // Default to an empty string (or whatever fits your needs)
+        nextId: "",
+      };
+    }
 
     $planNodes = [...$planNodes, newNode];
     if ($planNodes.length === 1) $rootNodeId = id;
@@ -64,16 +73,17 @@
 <div class="panel col-left">
   <h2>🛠️ Registry & Tools</h2>
   <div style="margin-bottom: 20px;">
-    <label>Outils de Routage (Système)</label>
+    <label>Outils par default (Système)</label>
     <button
       class="btn-sys"
       style="border-left: 4px solid var(--warning)"
       on:click={() => addNode("condition")}>🔀 Ajouter Condition</button
     >
+
     <button
       class="btn-sys"
-      style="border-left: 4px solid var(--loop)"
-      on:click={() => addNode("loop")}>🔁 Ajouter Boucle</button
+      style="border-left: 4px solid var(--info, #3b82f6); margin-top: 5px;"
+      on:click={() => addNode("setVariable")}>🔧 Assigner Variable</button
     >
   </div>
 

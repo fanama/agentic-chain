@@ -48,6 +48,7 @@
         class:node-tool={n.type === "tool"}
         class:node-cond={n.type === "condition"}
         class:node-loop={n.type === "loop"}
+        class:node-setvar={n.type === "setVariable"}
       >
         <div class="node-header">
           <div class="node-title">
@@ -62,6 +63,9 @@
               {/if}
               {#if n.type === "loop"}
                 🔁 Boucle
+              {/if}
+              {#if n.type === "setVariable"}
+                🔧 Variable
               {/if}
             </span>
           </div>
@@ -123,6 +127,30 @@
                 bind:value={n.nextId}
               />
             </div>
+          </div>
+        {:else if n.type === "setVariable"}
+          <div class="inline-inputs">
+            <div>
+              <label>Clé (Nom dans le state)</label><input
+                type="text"
+                bind:value={n.key}
+                placeholder="ex: newVariable"
+              />
+            </div>
+            <div>
+              <label>Valeur à assigner</label><input
+                type="text"
+                bind:value={n.value}
+                placeholder="ex: 'valeur' ou state.val"
+              />
+            </div>
+          </div>
+          <div style="margin-top: 8px;">
+            <label>Suivant (ID)</label><input
+              type="text"
+              bind:value={n.nextId}
+              placeholder="Vide = Fin"
+            />
           </div>
         {/if}
       </div>
