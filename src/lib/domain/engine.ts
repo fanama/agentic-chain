@@ -120,7 +120,14 @@ export class SetVariableStep extends Step {
   }
 
   async execute(store: StateStore, logger: LoggerFn): Promise<Step | undefined> {
-    store.update(this.key, this.value);
+    try {
+
+      const value = JSON.parse(this.value)
+      store.update(this.key, value);
+    } catch {
+
+      store.update(this.key, this.value);
+    }
     logger(`[${this.id}] 🔀 Update: ${this.key} : ${this.value}`, 'log-warn');
     return this.nextStep;
   }
