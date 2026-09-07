@@ -1,5 +1,6 @@
 import { writable, type Writable, get } from 'svelte/store';
 import { Tool, type PlanNode, type StateContext } from '../domain/engine';
+import { showToast } from './toasts';
 
 export interface LogEntry { msg: string; cls: string; }
 
@@ -64,6 +65,7 @@ export function exportPlan() {
   a.download = "agent_graph.json";
   a.click();
   URL.revokeObjectURL(url);
+  showToast('Graphe exporté !', 'success');
 }
 
 export function loadPlan(event: Event) {
@@ -76,9 +78,9 @@ export function loadPlan(event: Event) {
       const data = JSON.parse(e.target?.result as string);
       rootNodeId.set(data.rootId || "");
       planNodes.set(data.nodes || []);
-      alert("Graphe chargé avec succès !");
+      showToast('Graphe chargé avec succès !', 'success');
     } catch (err) {
-      alert("Fichier JSON invalide.");
+      showToast('Fichier JSON invalide.', 'error');
     }
   };
   reader.readAsText(file);

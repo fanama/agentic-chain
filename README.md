@@ -1,44 +1,98 @@
-# 🤖 Agentic Framework (V3)
+# Agentic Framework V3
 
-Bienvenue dans la documentation officielle de l'**Agentic Framework V3**. Cette version marque une transition majeure d'une exécution linéaire vers une architecture en **Graphe d'États Dynamique (State Graph)**, plaçant les outils et le routage au cœur du moteur d'orchestration.
+Architecture en **Graphe d'Etats Dynamique** pour l'orchestration d'outils IA. L'approche **Tool-First** place les outils et le routage au coeur du moteur.
 
----
+## Tech Stack
 
-## 🌟 Philosophie "Tool-First"
+- **Svelte 5** + **TypeScript** - UI reactive
+- **Vite 8** - bundler
+- **Axios** - requetes HTTP
+- **Bun** - runtime & package manager
 
-L'expérience utilisateur est désormais centrée sur l'approche **Tool-First**. Plutôt que de créer des nœuds vides pour y assigner des fonctions a posteriori, l'architecte visualise d'abord ses capacités globales (le Registre d'outils) et les injecte directement dans son workflow. L'édition du code JavaScript brut des outils se fait à la volée, sans jamais casser la structure du graphe existant.
+## Installation
 
----
+```bash
+bun install
+```
 
-## 🏗️ Architecture du Système
+## Developpement
 
-Le système est divisé en trois pôles interactifs :
-1. **Le Registre (Tools) :** Création, édition et listage des outils d'action.
-2. **Le Graphe Builder :** Assemblage des nœuds et configuration du routage.
-3. **Le Moteur d'Exécution (Runner) :** Initialisation du `StateStore`, exécution, monitoring (logs) et import/export JSON.
+```bash
+bun run dev
+```
 
-### Diagramme de Cas d'Utilisation
+## Build & Preview
 
+```bash
+bun run build
+bun run preview
+```
+
+## Type Check
+
+```bash
+bun run check
+```
+
+## Fonctionnalites
+
+- **Registry & Tools** : creation/edition des outils d'action en JS brut, validation de syntaxe.
+- **Graphe visual** : noeuds reordonnables (↑/↓), badges de type colores, autocompletion des IDs de routage et des variables du state.
+- **Editeur de variable graphique** : le noeud *Variable* permet d'assigner graphiquement une valeur (texte, nombre, booleen, liste, objet JSON) ou de **copier une variable existante / un parametre d'objet** (ex : `state.result.data.title`, `state.list[0]`) vers une nouvelle variable. Apercu en direct.
+- **Pilotage du Runner** : etat initial a saisir en formulaire, indicateur d'execution (idle / running / success / error), logs horodates et vue de la memoire (StateStore).
+- **Apercu image** : si un resultat contient une URL d'image, elle est affichee directement (ex : photo de chien aleatoire).
+- **Notifications** : toasts success/erreur/avertissement a la place des `alert()`.
+- **Import/Export** du graphe en JSON.
+
+## Outils fournis
+
+| Outil | Description |
+| :--- | :--- |
+| `api_request` | Requete HTTP (GET, POST, PUT, DELETE) via `state.url`, `state.method`, `state.headers`, `state.payload`. |
+| `add_one` | Incremente `state.count` de 1. |
+| `display_image` | Affiche une image depuis `state.imageUrl` ou `state.url` (par defaut : photo de chien aleatoire depuis dog.ceo). |
+
+## Architecture
+
+Le systeme repose sur 3 pokes :
+
+| Composant | Role |
+| :--- | :--- |
+| **ToolRegistry** | Catalogue d'outils central. Verrouillage de l'ID lors de l'edition. |
+| **Tool** | Logique metier isolee. Stocke le code JS brut (`execFnString`) pour edition dynamique. |
+| **StateStore** | Memoire centrale. Acces/mutation via `state.variable`. |
+| **Wiring Engine** | Compilateur pre-execution. Transforme l'UI declarative en graphe d'objets lies. |
+
+### Types de noeuds
+
+| Noeud | Role | Champs |
+| :--- | :--- | :--- |
+| **Outil** | Execute une fonction JS du registre et sauvegarde le resultat. | `toolId`, `outputKey`, `nextId` |
+| **Condition** | Evalue une expression JS et route vers la branche vrai/faux. | `expr`, `trueId`, `falseId` |
+| **Boucle** | Re-execute un corps tant qu'une condition est vraie. | `expr`, `bodyId`, `nextId` |
+| **Variable** | Assigne une valeur (ou copie une variable existante) dans le state. | `key`, `value`, `nextId` |
+
+### Diagramme des cas d'utilisation
 
 ```mermaid
 flowchart LR
     client[Utilisateur / Architecte]
 
     subgraph Registre
-        createTool((Créer un Outil))
-        editTool((Éditer un Outil))
+        createTool((Creer un Outil))
+        editTool((Editer un Outil))
         viewTools((Lister les Outils))
     end
 
     subgraph Graphe Builder
         addNode((Ajouter un noeud au Plan))
         configNode((Configurer Routage))
-        deleteNode((Supprimer Nœud))
+        deleteNode((Supprimer Noeud))
     end
 
-    subgraph Moteur d'Exécution
+    subgraph Moteur d'Execution
         initPlan((Initialiser Input))
-        execPlan((Exécuter Graphe))
+        execPlan((Executer Graphe))
         viewLogs((Consulter Logs & State))
         exportPlan((Exporter Graph JSON))
         loadPlan((Charger Graph JSON))
@@ -47,24 +101,48 @@ flowchart LR
     client --> createTool
     client --> editTool
     client --> viewTools
-
     client --> addNode
     client --> configNode
     client --> deleteNode
-
     client --> initPlan
     client --> execPlan
     client --> viewLogs
     client --> loadPlan
     client --> exportPlan
 
-    addNode --> viewTools 
-    execPlan --> configNode 
+    addNode --> viewTools
+    execPlan --> configNode
 ```
 
-### Architecture des Classes (Pattern Polymorphe)
+### Flux d'execution
 
-Les outils d'action (`ToolStep`) et de routage (`ConditionStep`, `LoopStep`) héritent de la même interface et sont traités sur un pied d'égalité par le moteur.
+```mermaid
+graph TD
+    A[/Input JSON Initial/] --> Init[Initialisation du StateStore]
+    Init --> Compiler[Phase de Wiring : Lier les IDs aux Objets JS]
+    Compiler --> Fetch[Recuperer le Noeud Actuel]
+
+    Fetch --> CheckType{Type de Noeud ?}
+
+    CheckType -- "ToolStep" --> ExecTool[Executer fonction JS de l'Outil]
+    ExecTool --> SaveState[Sauvegarder resultat dans StateStore via outputKey]
+    SaveState --> RouteTool[Pointer vers nextId]
+
+    CheckType -- "ConditionStep" --> EvalCond[Evaluer l'expression JS]
+    EvalCond --> IsCondTrue{Booleen ?}
+    IsCondTrue -- "VRAI" --> RouteTrue[Pointer vers trueId]
+    IsCondTrue -- "FAUX" --> RouteFalse[Pointer vers falseId]
+
+    RouteTool --> NextNode
+    RouteTrue --> NextNode
+    RouteFalse --> NextNode
+
+    NextNode{Pointeur existe ? Limite OK ?}
+    NextNode -- "VRAI" --> Fetch
+    NextNode -- "FAUX" --> End((Fin))
+```
+
+### Diagramme de classes
 
 ```mermaid
 classDiagram
@@ -87,13 +165,13 @@ classDiagram
         +String desc
         +String execFnString
         -Function executeFn
-        +execute(context: Object) Promise~Result~
+        +execute(context) Promise~Result~
     }
 
     class Step {
         <<Interface>>
         +UUID id
-        +execute(context: Object, logger) Promise~Step~
+        +execute(context, logger) Promise~Step~
     }
 
     class ToolStep {
@@ -107,88 +185,40 @@ classDiagram
         +UUID false_step_id
     }
 
-    ToolRegistry "1" *-- "*" Tool : stocke
-    Step <|-- ToolStep : implémente
-    Step <|-- ConditionStep : implémente
+    class LoopStep {
+        +String condition_expression
+        +UUID body_step_id
+        +UUID next_step_id
+    }
 
-    ToolStep "*" --> "1" Tool : référence
-    ToolStep "*" --> "1" Step : pointe vers (next)
-    ConditionStep "*" --> "2" Step : pointe vers (true/false)
+    class SetVariableStep {
+        +String key
+        +String value
+        +UUID next_step_id
+    }
+
+    ToolRegistry "1" *-- "*" Tool
+    Step <|-- ToolStep
+    Step <|-- ConditionStep
+    Step <|-- LoopStep
+    Step <|-- SetVariableStep
+    ToolStep "*" --> "1" Tool
+    ToolStep "*" --> "1" Step
+    ConditionStep "*" --> "2" Step
 ```
 
----
+## Structure du projet
 
-## 🔄 Flux de Travail (Exécution)
-
-Lors du clic sur **Démarrer l'Agent**, le moteur opère en deux phases distinctes :
-
-1. **La Compilation (Wiring) :** Le *Wiring Engine* lit la configuration textuelle de l'UI (les IDs), instancie les objets `Step` en mémoire, et transforme les chaînes de caractères en véritables pointeurs d'objets JavaScript imbriqués.
-2. **L'Exécution Dynamique :** Le moteur lance le nœud racine et laisse le graphe s'auto-naviguer jusqu'à sa fin (ou jusqu'à atteindre la limite de sécurité anti-boucle infinie).
-
-```mermaid
-graph TD
-    A[/Input JSON Initial/] --> Init[Initialisation du StateStore]
-    Init --> Compiler[Phase de Wiring : Lier les IDs aux Objets JS]
-    Compiler --> Fetch[Récupérer le Nœud Actuel]
-
-    Fetch --> CheckType{Type de Nœud ?}
-
-    %% Cas 1 : Tool
-    CheckType -- "ToolStep" --> ExecTool[Exécuter fonction JS de l'Outil]
-    ExecTool --> SaveState[Sauvegarder résultat dans StateStore via 'outputKey']
-    SaveState --> RouteTool[Pointer vers 'nextId']
-
-    %% Cas 2 : Condition
-    CheckType -- "ConditionStep" --> EvalCond[Évaluer l'expression JS]
-    EvalCond --> IsCondTrue{Résultat booléen ?}
-    IsCondTrue -- "VRAI" --> RouteTrue[Pointer vers 'trueId']
-    IsCondTrue -- "FAUX" --> RouteFalse[Pointer vers 'falseId']
-
-    %% Consolidation
-    RouteTool --> NextNode
-    RouteTrue --> NextNode
-    RouteFalse --> NextNode
-
-    NextNode{Pointeur existe ? Limite de sécurité OK ?}
-    NextNode -- "VRAI" --> Fetch
-    NextNode -- "FAUX" --> End((Fin de l'Exécution))
 ```
-
----
-
-## 🧩 Composants Clés & Évolutions (V2 vs V3)
-
-| Composant | Rôle dans la V3 | Évolution majeure |
-| :--- | :--- | :--- |
-| **ToolRegistry** | Catalogue d'outils central. | Interface unifiée. Verrouillage de l'ID lors de l'édition pour garantir l'intégrité du graphe. |
-| **Tool** | Logique métier isolée. | Stocke le code JS brut (`execFnString`) permettant l'édition dynamique via l'interface utilisateur. |
-| **StateStore** | Mémoire centrale ("cerveau"). | Injecté directement dans l'exécution via l'objet JS global `state`. Permet un accès/mutation via `state.variable`. |
-| **Nodes (UI)** | Représentation visuelle du graphe. | Utilisation d'identifiants stricts (`etape_1`) pour un câblage réseau bidirectionnel remplaçant la liste linéaire. |
-| **Wiring Engine** | Compilateur pré-exécution. | **Nouveauté :** Rend le graphe 100% autonome en transformant l'UI déclarative en graphe d'objets liés en mémoire. |
-
----
-
-## 🗺️ Expérience Architecte (User Journey)
-
-L'utilisation du framework suit un parcours fluide, conçu pour l'itération rapide :
-
-```mermaid
-journey
-    title Cycle de vie d'un workflow
-    
-    section 1. Préparation (Registry)
-      Création d'outils JS personnalisés: 5: Architecte
-      Test de validation de la syntaxe JS: 4: Système
-      Modification d'outils existants (Édition): 5: Architecte
-      
-    section 2. Assemblage (Graphe Builder)
-      Clic direct sur '+ Ajouter au Plan': 5: Architecte
-      Génération d'un NodeID auto (ex: etape_1): 4: Système
-      Configuration du routage (true/false/next): 4: Architecte
-      
-    section 3. Exécution & Monitoring
-      Définition du Nœud Racine et Input JSON: 5: Architecte
-      Compilation (Instanciation & Câblage objet): 5: Système
-      Mise à jour en temps réel du StateStore: 5: Système
-      Affichage détaillé des logs (Succès/Warn/Err): 4: Système
+src/
+  lib/
+    components/          # Composants Svelte
+      RegistryPanel.svelte      # Registre d'outils + creation de noeuds
+      GraphPanel.svelte         # Editeur du graphe (reordonnable)
+      SetVariableEditor.svelte  # Editeur graphique de variable
+      RunnerPanel.svelte        # Runner, logs, StateStore, apercu image
+      ToastContainer.svelte     # Notifications
+    domain/engine.ts     # Moteur : Step, compilation, execution
+    stores/              # Etat applicatif + toasts
+    tools/               # Outils d'action (decouverts automatiquement)
 ```

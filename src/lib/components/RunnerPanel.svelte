@@ -9,10 +9,13 @@
   } from "../stores";
   import { executePlan, type StateContext } from "../domain/engine";
   import { onMount } from "svelte";
+  import { showToast } from "../stores/toasts";
 
   let consoleElement: HTMLDivElement;
 
-  // Tableau réactif pour gérer nos champs dynamiques
+  let runStatus: "idle" | "running" | "success" | "error" = "idle";
+  let runLabel = "";
+
   let inputFields: { key: string; value: any; type: string }[] = [
     {
       key: "url",
@@ -23,23 +26,6 @@
     { key: "text_object", value: { name: "fana" }, type: "liste" },
   ];
 
-  /*
-  {
-  "mano": {
-    "test": "mano"
-  },
-  "liste": [
-    {
-      "nombre": 1
-    }
-  ],
-  "count": 0,
-  "url": "https://dog.ceo/api/breeds/image/random",
-  "method": "get"
-}
-  */
-
-  // Initialisation à partir du store JSON
   onMount(() => {
     try {
       const obj = JSON.parse($initialInputState);
@@ -60,12 +46,10 @@
         return { key, value: strValue, type };
       });
     } catch {
-      // Sécurité si le JSON initial est mal formé
       inputFields = [];
     }
   });
 
-  // Re-générer la chaîne JSON automatiquement quand un input change
   $: {
     const newObj: Record<string, any> = {};
     inputFields.forEach((field) => {
@@ -74,11 +58,8 @@
           newObj[field.key] = Number(field.value);
         } else if (field.type === "list" || field.type === "object") {
           try {
-            // Tente de parser le texte en vrai tableau/objet
             newObj[field.key] = JSON.parse(field.value);
           } catch {
-            // Si le JSON est temporairement invalide pendant la frappe,
-            // on injecte une structure vide par défaut pour ne pas tout casser.
             newObj[field.key] = field.type === "list" ? [] : {};
           }
         } else {
@@ -89,7 +70,27 @@
     $initialInputState = JSON.stringify(newObj, null, 2);
   }
 
-  // Fonctions pour gérer la liste des inputs
+  function isImageUrl(str: string): boolean {
+    return /^(https?:\/\/|\/)/i.test(str) && /\.(jpe?g|png|gif|webp|svg|avif|bmp)(\?.*)?$/i.test(str);
+  }
+
+  let displayImageUrl: string = "";
+
+  $: displayImageUrl = (() => {
+    const state: Record<string, any> = $activeStoreState;
+    const found: string[] = [];
+    for (const key of Object.keys(state)) {
+      const value = state[key];
+      if (typeof value === "string" && isImageUrl(value)) found.push(value);
+      else if (value && typeof value === "object" && !Array.isArray(value)) {
+        for (const f of ["imageUrl", "image", "img", "url", "message"]) {
+          if (typeof value[f] === "string" && isImageUrl(value[f])) found.push(value[f]);
+        }
+      }
+    }
+    return found[0] ?? "";
+  })();
+
   function addField() {
     inputFields = [
       ...inputFields,
@@ -111,7 +112,11 @@
 
   async function runAgent(): Promise<void> {
     if (!$rootNodeId || $planNodes.length === 0) {
-      alert("Vérifiez l'ID racine et le graphe.");
+      showToast("Définissez le nœud racine et ajoutez des nœuds.", "warn");
+      return;
+    }
+    if (!$planNodes.some((n) => n.id === $rootNodeId)) {
+      showToast(`Le nœud racine "${$rootNodeId}" n'existe pas dans le graphe.`, "warn");
       return;
     }
 
@@ -119,10 +124,12 @@
     try {
       initState = JSON.parse($initialInputState);
     } catch {
-      alert("JSON initial invalide.");
+      showToast("Le JSON initial est invalide.", "error");
       return;
     }
 
+    runStatus = "running";
+    runLabel = "Exécution en cours…";
     $logs = [];
     appendLog("--- Démarrage de l'Agent ---", "log-sys");
     $activeStoreState = { ...initState };
@@ -136,22 +143,56 @@
         appendLog,
         (newState: StateContext) => ($activeStoreState = { ...newState }),
       );
-      appendLog("✅ Exécution terminée !", "success");
+      appendLog("✅ Exécution terminée !", "log-success");
+      runStatus = "success";
+      runLabel = "Terminé avec succès";
+      setTimeout(() => {
+        if (runStatus !== "running") runStatus = "idle";
+      }, 4000);
     } catch (err: any) {
       appendLog(`[❌] Erreur: ${err.message}`, "log-err");
+      runStatus = "error";
+      runLabel = "Échec de l'exécution";
+      showToast(`Erreur : ${err.message}`, "error", 6000);
+      setTimeout(() => {
+        if (runStatus !== "running") runStatus = "idle";
+      }, 4000);
     }
   }
 </script>
 
-<div class="panel col-right">
-  <h2>🚀 Runner</h2>
-  <label>Nœud Racine (Point de départ)</label>
-  <input type="text" bind:value={$rootNodeId} placeholder="ex: etape_1" />
+<section class="panel col-right">
+  <h2 class="panel-title">🚀 Runner</h2>
+  <p class="panel-subtitle" style="margin-bottom: 16px;">
+    Définissez l'état initial puis lancez l'agent.
+  </p>
 
-  <label>État Initial (Variables)</label>
+  <div class="run-status {runStatus}">
+    <span class="dot"></span>
+    {#if runStatus === "idle"}
+      Prêt à exécuter
+    {:else if runStatus === "running"}
+      {runLabel}
+    {:else if runStatus === "success"}
+      ✅ {runLabel}
+    {:else}
+      ❌ {runLabel}
+    {/if}
+  </div>
+
+  <label for="root-node-id">Nœud Racine (point de départ)</label>
+  <input
+    id="root-node-id"
+    type="text"
+    bind:value={$rootNodeId}
+    placeholder="ex: etape_1"
+    disabled={runStatus === "running"}
+  />
+
+  <label for="initial-state-editor">État Initial (variables)</label>
   <div
-    class="dynamic-inputs"
-    style="margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px;"
+    id="initial-state-editor"
+    style="margin-bottom: 15px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background:#fafbfc;"
   >
     {#each inputFields as field, i}
       <div
@@ -163,7 +204,7 @@
           placeholder="Clé"
           style="flex: 1; margin-top: 2px;"
         />
-        <span style="margin-top: 6px;">=</span>
+        <span style="margin-top: 7px; color: var(--text-light);">=</span>
 
         {#if field.type === "number"}
           <input
@@ -175,14 +216,12 @@
         {:else if field.type === "list"}
           <textarea
             bind:value={field.value}
-            placeholder=""
             rows="2"
             style="flex: 2; resize: vertical;"
           ></textarea>
         {:else if field.type === "object"}
           <textarea
             bind:value={field.value}
-            placeholder=""
             rows="2"
             style="flex: 2; resize: vertical;"
           ></textarea>
@@ -204,17 +243,23 @@
 
         <button
           on:click={() => removeField(i)}
-          style="background: none; border: none; cursor: pointer; color: red; margin-top: 6px;"
-          >✖</button
+          title="Supprimer cette variable"
+          style="background: none; border: none; cursor: pointer; color: var(--error); margin-top: 7px; font-size:14px;"
+          >✕</button
         >
       </div>
     {/each}
+    {#if inputFields.length === 0}
+      <p style="color: var(--text-light); font-size: 12px; text-align:center; margin: 8px 0;">
+        Aucune variable pour le moment.
+      </p>
+    {/if}
     <button
       class="btn-add"
-      style="margin-top: 5px; font-size: 0.9em; padding: 4px 8px;"
+      style="margin-top: 5px; font-size: 0.9em; padding: 6px 8px;"
       on:click={addField}
     >
-      + Ajouter une variable
+      ＋ Ajouter une variable
     </button>
   </div>
 
@@ -223,6 +268,7 @@
       >Voir le JSON final généré</summary
     >
     <textarea
+      class="mono"
       bind:value={$initialInputState}
       rows="3"
       disabled
@@ -232,22 +278,35 @@
 
   <button
     class="btn-add"
-    style="background-color: var(--primary); margin-bottom: 20px; width: 100%;"
-    on:click={runAgent}>▶ Démarrer l'Agent</button
+    style="background-color: var(--primary); margin-bottom: 20px; width: 100%; padding: 12px; font-size: 15px;"
+    on:click={runAgent}
+    disabled={runStatus === "running"}
   >
+    {runStatus === "running" ? "⏳ Exécution…" : "▶ Démarrer l'Agent"}
+  </button>
 
-  <label>Logs système</label>
+  <label for="console-log">Logs système</label>
   <div id="console-log" bind:this={consoleElement}>
     {#if $logs.length === 0}
-      Attente...
+      <span class="log-sys">En attente…</span>
     {/if}
     {#each $logs as log}
-      <span class={log.cls} style={log.cls === "success" ? "color: green" : ""}
+      <span class={log.cls}
         >{log.msg}{"\n"}</span
       >
     {/each}
   </div>
 
-  <label>Mémoire (StateStore)</label>
+  {#if displayImageUrl}
+    <span class="section-label">Aperçu image</span>
+    <div class="image-preview">
+      <img src={displayImageUrl} alt="Résultat de l'exécution de l'agent" loading="lazy" />
+      <a href={displayImageUrl} target="_blank" rel="noopener noreferrer">
+        🔗 Ouvrir en grand
+      </a>
+    </div>
+  {/if}
+
+  <label for="state-store-view">Mémoire (StateStore)</label>
   <div id="state-store-view">{JSON.stringify($activeStoreState, null, 2)}</div>
-</div>
+</section>

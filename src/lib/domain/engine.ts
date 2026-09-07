@@ -120,15 +120,25 @@ export class SetVariableStep extends Step {
   }
 
   async execute(store: StateStore, logger: LoggerFn): Promise<Step | undefined> {
+    let value: any = this.value;
     try {
-
-      const value = JSON.parse(this.value)
-      store.update(this.key, value);
+      value = JSON.parse(this.value);
     } catch {
-
-      store.update(this.key, this.value);
+      // Valeur brute : si c'est une référence `state.maVar` (ou un chemin
+      // imbriqué type `state.obj.param`, `state.list[0]`), on copie la valeur.
+      const ref = this.value.trim().match(
+        /^state((\.[A-Za-z_$][\w$]*)|(\[\s*\d+\s*\])|(\['[^']*'\])|(\["[^"]*"\]))+$/,
+      );
+      if (ref) {
+        try {
+          value = new Function('state', `return ${this.value.trim()}`)(store.getAll());
+        } catch {
+          value = this.value;
+        }
+      }
     }
-    logger(`[${this.id}] 🔀 Update: ${this.key} : ${this.value}`, 'log-warn');
+    store.update(this.key, value);
+    logger(`[${this.id}] 🔀 Update: ${this.key} = ${JSON.stringify(value)}`, 'log-warn');
     return this.nextStep;
   }
 }
